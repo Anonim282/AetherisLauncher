@@ -1,0 +1,55 @@
+<Window x:Class="AetherisLauncher.Views.FirstSetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Первоначальная настройка - Aetheris Launcher" Height="480" Width="640"
+        WindowStartupLocation="CenterScreen"
+        Background="#12131A" Foreground="#ECEFF4"
+        FontFamily="Segoe UI, Inter, Arial"
+        ResizeMode="NoResize">
+
+    <Grid Margin="32">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,24">
+            <TextBlock Text="⚡ Aetheris Launcher" FontSize="24" FontWeight="ExtraBold" Foreground="#00D2FF" Margin="0,0,0,6" />
+            <TextBlock Text="Добро пожаловать! Давайте настроим папку для установки игры." FontSize="15" Foreground="#94A3B8" />
+        </StackPanel>
+
+        <!-- Body -->
+        <StackPanel Grid.Row="1">
+            <Border Background="#1A202C" BorderBrush="#2D3748" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="📁 Папка установки (игры, сборки, моды и Java):" FontWeight="SemiBold" Foreground="#FFFFFF" Margin="0,0,0,10" />
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="120" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtInstallPath" Height="38" Background="#12151E" Foreground="#FFFFFF" BorderBrush="#334155" Padding="10,8" FontSize="13" VerticalContentAlignment="Center" />
+                        <Button Grid.Column="2" x:Name="BtnBrowse" Content="📁 Обзор..." Height="38" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" Click="BtnBrowse_Click" />
+                    </Grid>
+                    <TextBlock Text="По умолчанию используется стандартная изолированная папка %AppData%\.aetheris" FontSize="11" Foreground="#64748B" />
+                </StackPanel>
+            </Border>
+
+            <!-- Migration Option -->
+            <StackPanel x:Name="PanelMigration" Visibility="Collapsed" Margin="0,0,0,14">
+                <CheckBox x:Name="ChkMigrate" Content="📦 Перенести существующие сборки и файлы в выбранную папку" Foreground="#10B981" FontWeight="SemiBold" IsChecked="True" />
+                <TextBlock Text="Были обнаружены уже скачанные сборки и компоненты в текущей папке." FontSize="11" Foreground="#94A3B8" Margin="22,4,0,0" />
+            </StackPanel>
+
+            <TextBlock x:Name="TxtStatus" Text="" Foreground="#F59E0B" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- Footer -->
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <Button x:Name="BtnContinue" Content="🚀 Начать игру" Height="42" Width="180" HorizontalAlignment="Right" Background="#00D2FF" Foreground="#0A101D" FontWeight="Bold" FontSize="14" Click="BtnContinue_Click" />
+        </Grid>
+    </Grid>
+</Window>

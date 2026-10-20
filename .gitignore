@@ -1,0 +1,18 @@
+﻿# Visual Studio / .NET build outputs
+bin/
+obj/
+publish/
+*.exe
+*.pdb
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+.vscode/
+
+# Config & local runtime data
+config/
+active_account.json
+launcher_settings.json
+*.log
