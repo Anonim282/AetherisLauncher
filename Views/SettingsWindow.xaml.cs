@@ -39,6 +39,9 @@ namespace AetherisLauncher.Views
             if (CmbJava.SelectedItem == null && javas.Count > 0)
                 CmbJava.SelectedIndex = 0;
 
+            // Discord RPC
+            ChkDiscordRpc.IsChecked = _settings.EnableDiscordRpc;
+
             // Proxy
             switch (_settings.ProxyMode)
             {
@@ -80,12 +83,11 @@ namespace AetherisLauncher.Views
                 PanelCustomProxy.Visibility = Visibility.Collapsed;
         }
 
-        
         private void BtnBrowseGameRoot_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.OpenFolderDialog
             {
-                Title = "Выберите новую папку установки игры",
+                Title = "Выберите папку для установки игры",
                 InitialDirectory = Directory.Exists(TxtGameRoot.Text) ? TxtGameRoot.Text : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
             };
 
@@ -105,7 +107,7 @@ namespace AetherisLauncher.Views
                 if (DirectoryMigrationService.HasDataToMigrate(oldRoot))
                 {
                     var msgRes = MessageBox.Show(
-                        $"Вы изменили папку установки игры.\n\nПереместить существующие сборки, моды и компоненты в новую папку?\n\nОткуда: {oldRoot}\nКуда: {newRoot}",
+                        $"Вы изменили папку установки игры.\n\nПереместить существующие сборки, моды и миры в новую папку?\n\nОткуда: {oldRoot}\nКуда: {newRoot}",
                         "Смена директории игры",
                         MessageBoxButton.YesNoCancel,
                         MessageBoxImage.Question);
@@ -134,6 +136,8 @@ namespace AetherisLauncher.Views
             {
                 _settings.SelectedJavaPath = selectedJava.Path;
             }
+
+            _settings.EnableDiscordRpc = ChkDiscordRpc.IsChecked == true;
 
             if (RbDirect.IsChecked == true)
                 _settings.ProxyMode = ProxyMode.Direct;

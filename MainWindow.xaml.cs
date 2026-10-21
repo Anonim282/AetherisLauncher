@@ -24,6 +24,7 @@ namespace AetherisLauncher
         private MinecraftLauncher _launcher = null!;
         private readonly AuthService _auth;
         private CurseForgeImporter _importer = null!;
+        private DiscordRpcService? _discordRpc;
 
         private AuthAccount _activeAccount;
         private ObservableCollection<InstanceInfo> _instances = new();
@@ -54,11 +55,27 @@ namespace AetherisLauncher
             // Load Instances
             RefreshInstances();
 
+            // Initialize Discord Rich Presence
+            if (_settings.EnableDiscordRpc)
+            {
+                try
+                {
+                    _discordRpc = new DiscordRpcService(_settings.DiscordClientId);
+                    _discordRpc.LogReceived += LogConsole;
+                    _discordRpc.SetPresenceInLauncher();
+                }
+                catch (Exception ex)
+                {
+                    LogConsole($"[Discord RPC] Ошибка инициализации: {ex.Message}");
+                }
+            }
+
             LogConsole("==================================================");
-            LogConsole("⚡ Aetheris Launcher инициализирован и готов к работе.");
+            LogConsole("🚀 Aetheris Launcher инициализирован и готов к работе.");
             LogConsole($"📁 Папка сборок: {_instanceManager.GetInstancesRootDirectory()}");
             LogConsole($"👤 Активный профиль: {_activeAccount.Username} ({(_activeAccount.IsOffline ? "Offline" : "Лицензия Microsoft")})");
             LogConsole($"🌐 Сеть: {(_settings.UseBmclapiMirror ? "Зеркало BMCLAPI (активно)" : "Прямое подключение")}");
+            LogConsole($"🎮 Discord RPC: {(_settings.EnableDiscordRpc ? "Включен" : "Отключен")}");
             LogConsole("==================================================");
         }
 
@@ -114,12 +131,6 @@ namespace AetherisLauncher
             catch { }
         }
 
-        private void LogConsole(string message)
-        {
-            TxtConsole.AppendText(message + Environment.NewLine);
-            TxtConsole.ScrollToEnd();
-        }
-
         private LauncherSettings LoadSettings()
         {
             var path = LauncherSettings.GetConfigFilePath();
@@ -163,13 +174,15 @@ namespace AetherisLauncher
                 _activeAccount = wnd.ResultAccount;
                 SaveSavedAccount(_activeAccount);
                 UpdateAccountUI();
-                LogConsole($"[AETHERIS] Активный аккаунт обновлен и сохранен: {_activeAccount.Username} ({(_activeAccount.IsOffline ? "Offline" : "Лицензия Microsoft")})");
+                LogConsole($"[AETHERIS] Активный профиль изменен: {_activeAccount.Username} ({(_activeAccount.IsOffline ? "Offline" : "Лицензия Microsoft")})");
             }
         }
 
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
             var oldDir = _settings.GetEffectiveGameRootDirectory();
+            var oldRpc = _settings.EnableDiscordRpc;
+
             var wnd = new SettingsWindow(_settings, _network) { Owner = this };
             if (wnd.ShowDialog() == true)
             {
@@ -177,10 +190,27 @@ namespace AetherisLauncher
                 if (!string.Equals(oldDir, newDir, StringComparison.OrdinalIgnoreCase))
                 {
                     InitializeGameServices();
-                    LogConsole($"[AETHERIS] Папка игры изменена на: {newDir}");
+                    LogConsole($"[AETHERIS] Папка игры изменена: {newDir}");
                 }
+
+                // Handle Discord RPC toggle
+                if (_settings.EnableDiscordRpc != oldRpc)
+                {
+                    if (_settings.EnableDiscordRpc)
+                    {
+                        _discordRpc ??= new DiscordRpcService(_settings.DiscordClientId);
+                        _discordRpc.SetPresenceInLauncher();
+                        LogConsole("[Discord RPC] Интеграция включена.");
+                    }
+                    else
+                    {
+                        _discordRpc?.ClearPresence();
+                        LogConsole("[Discord RPC] Интеграция отключена.");
+                    }
+                }
+
                 RefreshInstances();
-                LogConsole($"[AETHERIS] Настройки лаунчера обновлены. Выделение памяти: {_settings.DefaultMemoryMb} MB");
+                LogConsole($"[AETHERIS] Настройки сохранены. Выделение памяти: {_settings.DefaultMemoryMb} MB");
             }
         }
 
@@ -205,7 +235,7 @@ namespace AetherisLauncher
                 if (sender is Button btn)
                 {
                     var origContent = btn.Content;
-                    btn.Content = "✅ Скопировано!";
+                    btn.Content = "✓ Скопировано!";
                     await Task.Delay(1800);
                     btn.Content = origContent;
                 }
@@ -239,7 +269,7 @@ namespace AetherisLauncher
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
                 if (files.Length > 0 && files[0].EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 {
                     await RunCurseForgeImport(files[0]);
@@ -249,9 +279,14 @@ namespace AetherisLauncher
 
         private async Task RunCurseForgeImport(string zipPath)
         {
+            if (!_isConsoleVisible)
+            {
+                BtnToggleConsole_Click(this, new RoutedEventArgs());
+            }
+
             ProgressBarMain.Value = 0;
             TxtStatus.Text = "Начало импорта сборки CurseForge...";
-            LogConsole($"[AETHERIS] Начало импорта архива: {zipPath}");
+            LogConsole($"[AETHERIS] Начало импорта из архива: {zipPath}");
 
             var progress = new Progress<CurseForgeImportProgress>(p =>
             {
@@ -312,20 +347,39 @@ namespace AetherisLauncher
                     {
                         try
                         {
-                            LogConsole("[Aetheris] Проверка и обновление лицензионной сессии Microsoft...");
+                            LogConsole("[Aetheris] Проверка и обновление лицензии сессии Microsoft...");
                             _activeAccount = await _auth.RefreshAccountAsync(_activeAccount);
                             SaveSavedAccount(_activeAccount);
                             UpdateAccountUI();
                         }
                         catch (Exception ex)
                         {
-                            LogConsole($"[Aetheris] Предупреждение при обновлении токена: {ex.Message}");
+                            LogConsole($"[Aetheris] Предупреждение обновления токена: {ex.Message}");
                         }
                     }
 
-                    await _launcher.LaunchAsync(instance, _activeAccount, _settings, progress);
+                    var gameProcess = await _launcher.LaunchAsync(instance, _activeAccount, _settings, progress);
                     ProgressBarMain.Value = 100;
                     TxtStatus.Text = $"Игра {instance.Name} запущена!";
+
+                    // Update Discord Presence to Playing
+                    if (_discordRpc != null && _settings.EnableDiscordRpc)
+                    {
+                        var modloaderInfo = string.IsNullOrEmpty(instance.ModLoader) ? "" : $" ({instance.ModLoader})";
+                        _discordRpc.SetPresenceInGame(instance.Name, $"Minecraft {instance.MinecraftVersion}{modloaderInfo}", _activeAccount.Username);
+
+                        gameProcess.EnableRaisingEvents = true;
+                        gameProcess.Exited += (s, ev) =>
+                        {
+                            Dispatcher.Invoke(() =>
+                            {
+                                if (_settings.EnableDiscordRpc)
+                                {
+                                    _discordRpc.SetPresenceInLauncher();
+                                }
+                            });
+                        };
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -349,7 +403,7 @@ namespace AetherisLauncher
         {
             if (sender is Button btn && btn.Tag is InstanceInfo instance)
             {
-                var result = MessageBox.Show($"Вы уверены, что хотите удалить сборку \"{instance.Name}\"? Все сохранения и моды этой сборки будут удалены.",
+                var result = MessageBox.Show($"Вы уверены, что хотите удалить сборку \"{instance.Name}\"? Все сохранения и миры этой сборки будут удалены.",
                     "Подтверждение удаления", MessageBoxButton.YesNo, MessageBoxImage.Question);
 
                 if (result == MessageBoxResult.Yes)
@@ -367,18 +421,30 @@ namespace AetherisLauncher
             {
                 Name = $"Instance {DateTime.Now:dd.MM HH:mm}",
                 MinecraftVersion = "1.20.1",
-                ModLoader = "fabric",
-                ModLoaderVersion = "0.15.11",
+                ModLoader = "forge",
+                ModLoaderVersion = "47.3.0",
                 AllocatedMemoryMb = _settings.DefaultMemoryMb
             };
 
             _instanceManager.SaveInstance(defaultInst);
             RefreshInstances();
+            LogConsole($"[AETHERIS] Создана новая пустая сборка {defaultInst.Name}");
+        }
 
-            LogConsole($"[AETHERIS] Создан новый чистый инстанс: {defaultInst.Name}");
-            MessageBox.Show($"Создан новый инстанс: {defaultInst.Name} (Minecraft 1.20.1 Fabric)!\nВы можете запустить его или открыть папку и добавить любые свои моды в папку mods.",
-                "Инстанс создан", MessageBoxButton.OK, MessageBoxImage.Information);
+        private void LogConsole(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                var line = $"[{DateTime.Now:HH:mm:ss}] {message}";
+                TxtConsole.AppendText(line + Environment.NewLine);
+                TxtConsole.ScrollToEnd();
+            });
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _discordRpc?.Dispose();
+            base.OnClosed(e);
         }
     }
 }
-
