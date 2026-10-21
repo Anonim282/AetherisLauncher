@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 
 namespace AetherisLauncher.Models
@@ -25,7 +25,7 @@ namespace AetherisLauncher.Models
 
         // Discord Rich Presence
         public bool EnableDiscordRpc { get; set; } = true;
-        public string DiscordClientId { get; set; } = "1342152865768214619";
+        public string DiscordClientId { get; set; } = "450485984333660181";
 
         public string GetEffectiveGameRootDirectory()
         {

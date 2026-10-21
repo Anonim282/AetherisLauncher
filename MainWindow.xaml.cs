@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -139,7 +139,12 @@ namespace AetherisLauncher
                 try
                 {
                     var json = File.ReadAllText(path);
-                    return JsonSerializer.Deserialize<LauncherSettings>(json) ?? new LauncherSettings();
+                    var settings = JsonSerializer.Deserialize<LauncherSettings>(json) ?? new LauncherSettings();
+                    if (settings.DiscordClientId == "1342152865768214619")
+                    {
+                        settings.DiscordClientId = "450485984333660181";
+                    }
+                    return settings;
                 }
                 catch { }
             }
@@ -193,20 +198,28 @@ namespace AetherisLauncher
                     LogConsole($"[AETHERIS] Папка игры изменена: {newDir}");
                 }
 
-                // Handle Discord RPC toggle
-                if (_settings.EnableDiscordRpc != oldRpc)
+                // Handle Discord RPC settings update
+                if (_settings.EnableDiscordRpc)
                 {
-                    if (_settings.EnableDiscordRpc)
+                    if (_discordRpc == null)
                     {
-                        _discordRpc ??= new DiscordRpcService(_settings.DiscordClientId);
-                        _discordRpc.SetPresenceInLauncher();
-                        LogConsole("[Discord RPC] Интеграция включена.");
+                        _discordRpc = new DiscordRpcService(_settings.DiscordClientId);
+                        _discordRpc.LogReceived += LogConsole;
                     }
                     else
                     {
-                        _discordRpc?.ClearPresence();
-                        LogConsole("[Discord RPC] Интеграция отключена.");
+                        _discordRpc.UpdateClientId(_settings.DiscordClientId);
                     }
+                    _discordRpc.SetPresenceInLauncher();
+                    if (!oldRpc)
+                    {
+                        LogConsole("[Discord RPC] Интеграция включена.");
+                    }
+                }
+                else if (oldRpc)
+                {
+                    _discordRpc?.ClearPresence();
+                    LogConsole("[Discord RPC] Интеграция отключена.");
                 }
 
                 RefreshInstances();

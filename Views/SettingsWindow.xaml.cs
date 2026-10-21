@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -41,6 +41,8 @@ namespace AetherisLauncher.Views
 
             // Discord RPC
             ChkDiscordRpc.IsChecked = _settings.EnableDiscordRpc;
+            TxtDiscordClientId.Text = _settings.DiscordClientId;
+            PanelDiscordDetails.Visibility = _settings.EnableDiscordRpc ? Visibility.Visible : Visibility.Collapsed;
 
             // Proxy
             switch (_settings.ProxyMode)
@@ -81,6 +83,18 @@ namespace AetherisLauncher.Views
         {
             if (PanelCustomProxy != null)
                 PanelCustomProxy.Visibility = Visibility.Collapsed;
+        }
+
+        private void ChkDiscordRpc_Checked(object sender, RoutedEventArgs e)
+        {
+            if (PanelDiscordDetails != null)
+                PanelDiscordDetails.Visibility = Visibility.Visible;
+        }
+
+        private void ChkDiscordRpc_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (PanelDiscordDetails != null)
+                PanelDiscordDetails.Visibility = Visibility.Collapsed;
         }
 
         private void BtnBrowseGameRoot_Click(object sender, RoutedEventArgs e)
@@ -138,6 +152,8 @@ namespace AetherisLauncher.Views
             }
 
             _settings.EnableDiscordRpc = ChkDiscordRpc.IsChecked == true;
+            var inputClientId = TxtDiscordClientId.Text.Trim();
+            _settings.DiscordClientId = string.IsNullOrWhiteSpace(inputClientId) ? "450485984333660181" : inputClientId;
 
             if (RbDirect.IsChecked == true)
                 _settings.ProxyMode = ProxyMode.Direct;

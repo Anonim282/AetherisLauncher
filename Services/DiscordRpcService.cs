@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
@@ -12,7 +12,7 @@ namespace AetherisLauncher.Services
     public class DiscordRpcService : IDisposable
     {
         private NamedPipeClientStream? _pipe;
-        private readonly string _clientId;
+        private string _clientId;
         private readonly int _processId;
         private bool _isConnected;
         private bool _isDisposed;
@@ -30,11 +30,22 @@ namespace AetherisLauncher.Services
 
         public DiscordRpcService(string clientId)
         {
-            _clientId = string.IsNullOrWhiteSpace(clientId) ? "1342152865768214619" : clientId;
+            _clientId = string.IsNullOrWhiteSpace(clientId) ? "450485984333660181" : clientId;
             _processId = Process.GetCurrentProcess().Id;
 
             // Start background worker for connection maintenance
             Task.Run(ConnectionWorkerAsync);
+        }
+
+        public void UpdateClientId(string newClientId)
+        {
+            var targetId = string.IsNullOrWhiteSpace(newClientId) ? "450485984333660181" : newClientId;
+            if (_clientId != targetId)
+            {
+                _clientId = targetId;
+                LogReceived?.Invoke($"[Discord RPC] Смена Client ID на: {_clientId}");
+                Disconnect();
+            }
         }
 
         public void SetPresenceInLauncher()
@@ -42,7 +53,7 @@ namespace AetherisLauncher.Services
             _currentDetails = "В меню лаунчера";
             _currentState = "Выбирает сборку";
             _startTimestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            _largeImage = "aetheris_logo";
+            _largeImage = (_clientId == "450485984333660181") ? "default" : "aetheris_logo";
             _largeText = "Aetheris Launcher";
             _smallImage = null;
             _smallText = null;
@@ -55,9 +66,9 @@ namespace AetherisLauncher.Services
             _currentDetails = $"Играет: {instanceName}";
             _currentState = $"{version} • {username}";
             _startTimestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            _largeImage = "aetheris_logo";
+            _largeImage = (_clientId == "450485984333660181") ? "pack" : "aetheris_logo";
             _largeText = instanceName;
-            _smallImage = "minecraft";
+            _smallImage = (_clientId == "450485984333660181") ? "minecraft" : null;
             _smallText = $"Игрок: {username}";
 
             UpdatePresence();
@@ -102,7 +113,7 @@ namespace AetherisLauncher.Services
                 {
                     assets = new
                     {
-                        large_image = _largeImage ?? "aetheris_logo",
+                        large_image = _largeImage,
                         large_text = _largeText ?? "Aetheris Launcher",
                         small_image = _smallImage,
                         small_text = _smallText
@@ -134,6 +145,33 @@ namespace AetherisLauncher.Services
 
                 string json = JsonSerializer.Serialize(payload);
                 SendFrame(1, json);
+
+                // Check Discord response
+                var (op, response) = ReadFrame();
+                if (response.Contains("\"evt\":\"ERROR\""))
+                {
+                    LogReceived?.Invoke($"[Discord RPC] Предупреждение Discord: {response}");
+
+                    // Fallback without assets/buttons if Discord rejected custom assets
+                    var fallbackPayload = new
+                    {
+                        cmd = "SET_ACTIVITY",
+                        args = new
+                        {
+                            pid = _processId,
+                            activity = new
+                            {
+                                details = _currentDetails,
+                                state = _currentState,
+                                timestamps
+                            }
+                        },
+                        nonce = Guid.NewGuid().ToString()
+                    };
+
+                    SendFrame(1, JsonSerializer.Serialize(fallbackPayload));
+                    ReadFrame();
+                }
             }
             catch (Exception ex)
             {
@@ -170,11 +208,13 @@ namespace AetherisLauncher.Services
         {
             for (int i = 0; i < 10; i++)
             {
+                string pipeName = $"discord-ipc-{i}";
+                bool connected = false;
                 try
                 {
-                    string pipeName = $"discord-ipc-{i}";
                     _pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
                     _pipe.Connect(500);
+                    connected = true;
 
                     // Send Handshake
                     var handshake = new
@@ -194,11 +234,23 @@ namespace AetherisLauncher.Services
                         LogReceived?.Invoke($"[Discord RPC] Подключено к Discord через {pipeName}");
                         return;
                     }
+                    else
+                    {
+                        LogReceived?.Invoke($"[Discord RPC] Сбой авторизации ({pipeName}): op={op}, ответ: {response}");
+                    }
 
                     Disconnect();
                 }
-                catch
+                catch (TimeoutException)
                 {
+                    Disconnect();
+                }
+                catch (Exception ex)
+                {
+                    if (connected)
+                    {
+                        LogReceived?.Invoke($"[Discord RPC] Ошибка подключения ({pipeName}): {ex.Message}");
+                    }
                     Disconnect();
                 }
             }
