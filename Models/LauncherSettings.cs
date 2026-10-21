@@ -23,10 +23,6 @@ namespace AetherisLauncher.Models
         public string? SelectedJavaPath { get; set; }
         public string? ActiveAccountId { get; set; }
 
-        // Discord Rich Presence
-        public bool EnableDiscordRpc { get; set; } = true;
-        public string DiscordClientId { get; set; } = "450485984333660181";
-
         public string GetEffectiveGameRootDirectory()
         {
             if (!string.IsNullOrWhiteSpace(GameRootDirectory))

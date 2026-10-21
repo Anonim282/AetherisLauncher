@@ -24,7 +24,6 @@ namespace AetherisLauncher
         private MinecraftLauncher _launcher = null!;
         private readonly AuthService _auth;
         private CurseForgeImporter _importer = null!;
-        private DiscordRpcService? _discordRpc;
 
         private AuthAccount _activeAccount;
         private ObservableCollection<InstanceInfo> _instances = new();
@@ -55,27 +54,11 @@ namespace AetherisLauncher
             // Load Instances
             RefreshInstances();
 
-            // Initialize Discord Rich Presence
-            if (_settings.EnableDiscordRpc)
-            {
-                try
-                {
-                    _discordRpc = new DiscordRpcService(_settings.DiscordClientId);
-                    _discordRpc.LogReceived += LogConsole;
-                    _discordRpc.SetPresenceInLauncher();
-                }
-                catch (Exception ex)
-                {
-                    LogConsole($"[Discord RPC] Ошибка инициализации: {ex.Message}");
-                }
-            }
-
             LogConsole("==================================================");
             LogConsole("🚀 Aetheris Launcher инициализирован и готов к работе.");
             LogConsole($"📁 Папка сборок: {_instanceManager.GetInstancesRootDirectory()}");
             LogConsole($"👤 Активный профиль: {_activeAccount.Username} ({(_activeAccount.IsOffline ? "Offline" : "Лицензия Microsoft")})");
             LogConsole($"🌐 Сеть: {(_settings.UseBmclapiMirror ? "Зеркало BMCLAPI (активно)" : "Прямое подключение")}");
-            LogConsole($"🎮 Discord RPC: {(_settings.EnableDiscordRpc ? "Включен" : "Отключен")}");
             LogConsole("==================================================");
         }
 
@@ -139,12 +122,7 @@ namespace AetherisLauncher
                 try
                 {
                     var json = File.ReadAllText(path);
-                    var settings = JsonSerializer.Deserialize<LauncherSettings>(json) ?? new LauncherSettings();
-                    if (settings.DiscordClientId == "1342152865768214619")
-                    {
-                        settings.DiscordClientId = "450485984333660181";
-                    }
-                    return settings;
+                    return JsonSerializer.Deserialize<LauncherSettings>(json) ?? new LauncherSettings();
                 }
                 catch { }
             }
@@ -186,7 +164,6 @@ namespace AetherisLauncher
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
             var oldDir = _settings.GetEffectiveGameRootDirectory();
-            var oldRpc = _settings.EnableDiscordRpc;
 
             var wnd = new SettingsWindow(_settings, _network) { Owner = this };
             if (wnd.ShowDialog() == true)
@@ -196,30 +173,6 @@ namespace AetherisLauncher
                 {
                     InitializeGameServices();
                     LogConsole($"[AETHERIS] Папка игры изменена: {newDir}");
-                }
-
-                // Handle Discord RPC settings update
-                if (_settings.EnableDiscordRpc)
-                {
-                    if (_discordRpc == null)
-                    {
-                        _discordRpc = new DiscordRpcService(_settings.DiscordClientId);
-                        _discordRpc.LogReceived += LogConsole;
-                    }
-                    else
-                    {
-                        _discordRpc.UpdateClientId(_settings.DiscordClientId);
-                    }
-                    _discordRpc.SetPresenceInLauncher();
-                    if (!oldRpc)
-                    {
-                        LogConsole("[Discord RPC] Интеграция включена.");
-                    }
-                }
-                else if (oldRpc)
-                {
-                    _discordRpc?.ClearPresence();
-                    LogConsole("[Discord RPC] Интеграция отключена.");
                 }
 
                 RefreshInstances();
@@ -374,25 +327,6 @@ namespace AetherisLauncher
                     var gameProcess = await _launcher.LaunchAsync(instance, _activeAccount, _settings, progress);
                     ProgressBarMain.Value = 100;
                     TxtStatus.Text = $"Игра {instance.Name} запущена!";
-
-                    // Update Discord Presence to Playing
-                    if (_discordRpc != null && _settings.EnableDiscordRpc)
-                    {
-                        var modloaderInfo = string.IsNullOrEmpty(instance.ModLoader) ? "" : $" ({instance.ModLoader})";
-                        _discordRpc.SetPresenceInGame(instance.Name, $"Minecraft {instance.MinecraftVersion}{modloaderInfo}", _activeAccount.Username);
-
-                        gameProcess.EnableRaisingEvents = true;
-                        gameProcess.Exited += (s, ev) =>
-                        {
-                            Dispatcher.Invoke(() =>
-                            {
-                                if (_settings.EnableDiscordRpc)
-                                {
-                                    _discordRpc.SetPresenceInLauncher();
-                                }
-                            });
-                        };
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -452,12 +386,6 @@ namespace AetherisLauncher
                 TxtConsole.AppendText(line + Environment.NewLine);
                 TxtConsole.ScrollToEnd();
             });
-        }
-
-        protected override void OnClosed(EventArgs e)
-        {
-            _discordRpc?.Dispose();
-            base.OnClosed(e);
         }
     }
 }
