@@ -173,12 +173,11 @@ namespace AetherisLauncher.Services
 chcp 65001 > nul
 timeout /t 1 /nobreak > nul
 :retry
-copy /y ""{tempExePath}"" ""{currentExePath}"" > nul
+move /y ""{tempExePath}"" ""{currentExePath}"" > nul
 if errorlevel 1 (
     timeout /t 1 /nobreak > nul
     goto retry
 )
-del /f /q ""{tempExePath}"" > nul
 start """" ""{currentExePath}""
 del /f /q ""%~f0"" > nul
 exit
