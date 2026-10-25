@@ -79,7 +79,7 @@ namespace AetherisLauncher.Services
 
                 _client.SetPresence(new RichPresence
                 {
-                    Details = $"В игре: {instanceName}",
+                    Details = $"Играет в сборку: {instanceName}",
                     State = $"Minecraft {mcVersion}",
                     Timestamps = _gameStartTime,
                     Assets = new Assets
