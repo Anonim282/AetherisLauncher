@@ -121,9 +121,9 @@ namespace AetherisLauncher.Services
                     LatestVersion = remoteVer
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                LogMessage?.Invoke($"[UPDATER] Ошибка при проверке обновлений: {ex.Message}");
+                LogMessage?.Invoke("[UPDATER] Ошибка при проверке обновлений (сервер недоступен).");
                 return null;
             }
         }
@@ -138,7 +138,7 @@ namespace AetherisLauncher.Services
             var tempExePath = Path.Combine(currentDir, "AetherisLauncher_update.tmp");
             var scriptPath = Path.Combine(currentDir, "update_apply.cmd");
 
-            LogMessage?.Invoke($"[UPDATER] Загрузка обновления из {downloadUrl}...");
+            LogMessage?.Invoke("[UPDATER] Загрузка файлов обновления...");
 
             var client = _network.GetClient();
             using (var response = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct))

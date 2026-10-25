@@ -456,9 +456,9 @@ namespace AetherisLauncher
                     LogConsole("[UPDATER] У вас установлена актуальная версия лаунчера.");
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                LogConsole($"[UPDATER] Ошибка при проверке обновлений: {ex.Message}");
+                LogConsole("[UPDATER] Ошибка при проверке обновлений.");
             }
         }
     }
