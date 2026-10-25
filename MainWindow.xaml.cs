@@ -23,6 +23,8 @@ namespace AetherisLauncher
         private MinecraftDownloader _downloader = null!;
         private MinecraftLauncher _launcher = null!;
         private readonly AuthService _auth;
+        private readonly DiscordRpcService _discord;
+        private readonly UpdateService _updateService;
         private CurseForgeImporter _importer = null!;
 
         private AuthAccount _activeAccount;
@@ -37,6 +39,14 @@ namespace AetherisLauncher
             _network = new NetworkService(_settings);
             _javaRuntime = new JavaRuntimeService(_network);
             _auth = new AuthService(_network);
+            _discord = new DiscordRpcService();
+            _discord.LogMessage += msg => Dispatcher.Invoke(() => LogConsole(msg));
+            _discord.Initialize();
+            Closed += (s, e) => _discord.Dispose();
+
+            _updateService = new UpdateService(_network);
+            _updateService.LogMessage += msg => Dispatcher.Invoke(() => LogConsole(msg));
+            Loaded += (s, e) => _ = CheckForLauncherUpdatesAsync();
 
             // Check First Launch
             if (!_settings.IsFirstLaunchCompleted)
@@ -327,9 +337,21 @@ namespace AetherisLauncher
                     var gameProcess = await _launcher.LaunchAsync(instance, _activeAccount, _settings, progress);
                     ProgressBarMain.Value = 100;
                     TxtStatus.Text = $"Игра {instance.Name} запущена!";
+
+                    _discord.SetPlaying(instance.Name, instance.MinecraftVersion);
+                    gameProcess.EnableRaisingEvents = true;
+                    gameProcess.Exited += (s, ev) =>
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            _discord.SetInMenu();
+                            TxtStatus.Text = $"Игра {instance.Name} закрыта.";
+                        });
+                    };
                 }
                 catch (Exception ex)
                 {
+                    _discord.SetInMenu();
                     LogConsole($"[LAUNCH ERROR] {ex}");
                     MessageBox.Show($"Не удалось запустить Minecraft: {ex.Message}", "Ошибка запуска", MessageBoxButton.OK, MessageBoxImage.Error);
                     TxtStatus.Text = "Ошибка при запуске игры.";
@@ -386,6 +408,54 @@ namespace AetherisLauncher
                 TxtConsole.AppendText(line + Environment.NewLine);
                 TxtConsole.ScrollToEnd();
             });
+        }
+
+        private async Task CheckForLauncherUpdatesAsync()
+        {
+            try
+            {
+                var update = await _updateService.CheckForUpdatesAsync();
+                if (update != null && update.HasUpdate)
+                {
+                    LogConsole($"[UPDATER] Найдено новое обновление: {update.VersionString} (текущая версия: v{update.CurrentVersion})");
+
+                    var msg = $"Доступна новая версия лаунчера: {update.VersionString}!\n\n";
+                    if (!string.IsNullOrWhiteSpace(update.ChangeLog))
+                    {
+                        msg += $"Что нового:\n{update.ChangeLog.Trim()}\n\n";
+                    }
+                    msg += "Хотите обновить лаунчер сейчас?";
+
+                    var result = MessageBox.Show(msg, "Обновление Aetheris Launcher", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        if (!_isConsoleVisible)
+                        {
+                            BtnToggleConsole_Click(this, new RoutedEventArgs());
+                        }
+
+                        ProgressBarMain.Value = 0;
+                        TxtStatus.Text = $"Загрузка обновления {update.VersionString}...";
+
+                        var progress = new Progress<double>(pct =>
+                        {
+                            ProgressBarMain.Value = pct;
+                            TxtProgressPercentage.Text = $"{(int)pct}%";
+                            TxtStatus.Text = $"Загрузка обновления: {(int)pct}%";
+                        });
+
+                        await _updateService.DownloadAndApplyUpdateAsync(update.DownloadUrl, progress);
+                    }
+                }
+                else
+                {
+                    LogConsole("[UPDATER] У вас установлена актуальная версия лаунчера.");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[UPDATER] Ошибка при проверке обновлений: {ex.Message}");
+            }
         }
     }
 }

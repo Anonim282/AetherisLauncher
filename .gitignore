@@ -1,4 +1,4 @@
-﻿# Visual Studio / .NET build outputs
+# Visual Studio / .NET build outputs
 bin/
 obj/
 publish/
@@ -16,3 +16,4 @@ config/
 active_account.json
 launcher_settings.json
 *.log
+java_mod_dep/
