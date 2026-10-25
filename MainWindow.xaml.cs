@@ -48,6 +48,10 @@ namespace AetherisLauncher
             _updateService.LogMessage += msg => Dispatcher.Invoke(() => LogConsole(msg));
             Loaded += (s, e) => _ = CheckForLauncherUpdatesAsync();
 
+            var currentVer = _updateService.GetCurrentVersion();
+            TxtLauncherVersion.Text = $"v{currentVer.Major}.{currentVer.Minor}.{currentVer.Build}";
+            Title = $"Aetheris Launcher v{currentVer.Major}.{currentVer.Minor}.{currentVer.Build}";
+
             // Check First Launch
             if (!_settings.IsFirstLaunchCompleted)
             {
