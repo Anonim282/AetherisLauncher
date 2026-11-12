@@ -204,27 +204,39 @@ namespace AetherisLauncher.Services
             int completed = 0;
             progress?.Report($"[Aetheris] Загрузка ресурсов и языковых пакетов (0/{total})...");
 
-            await Parallel.ForEachAsync(missingHashes, new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = ct }, async (hash, token) =>
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+            try
             {
-                var sub = hash[..2];
-                var filePath = Path.Combine(objectsDir, sub, hash);
-                var url = $"https://resources.download.minecraft.net/{sub}/{hash}";
+                await Parallel.ForEachAsync(missingHashes, new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = linkedCts.Token }, async (hash, token) =>
+                {
+                    var sub = hash[..2];
+                    var filePath = Path.Combine(objectsDir, sub, hash);
+                    var url = $"https://resources.download.minecraft.net/{sub}/{hash}";
 
-                try
-                {
-                    await _network.DownloadFileAsync(url, filePath, null, token);
-                }
-                catch
-                {
-                    // Continue with other assets if one fails
-                }
+                    try
+                    {
+                        using var singleAssetCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        using var itemToken = CancellationTokenSource.CreateLinkedTokenSource(token, singleAssetCts.Token);
+                        await _network.DownloadFileAsync(url, filePath, null, itemToken.Token);
+                    }
+                    catch
+                    {
+                        // Continue with other assets if one fails or times out
+                    }
 
-                var count = Interlocked.Increment(ref completed);
-                if (count % 100 == 0 || count == total)
-                {
-                    progress?.Report($"[Aetheris] Загрузка ресурсов и языковых пакетов ({count}/{total})...");
-                }
-            });
+                    var count = Interlocked.Increment(ref completed);
+                    if (count % 25 == 0 || count == total)
+                    {
+                        progress?.Report($"[Aetheris] Загрузка ресурсов и языковых пакетов ({count}/{total})...");
+                    }
+                });
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                progress?.Report($"[Aetheris] Ресурсы ({completed}/{total}) загружены. Переход к запуску игры...");
+            }
         }
 
         public async Task<string> EnsureNeoForgeVersionAsync(
