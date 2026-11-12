@@ -46,7 +46,20 @@ namespace AetherisLauncher.Services
             // 1. Ensure vanilla files
             var vanillaJsonPath = await _downloader.EnsureVanillaVersionAsync(mcVersion, progress, ct);
 
-            // 2. Ensure modloader
+            // 2. Resolve Java first (needed for Forge / NeoForge client processor execution)
+            string javaExe;
+            if (!string.IsNullOrEmpty(instance.CustomJavaPath) && File.Exists(instance.CustomJavaPath))
+            {
+                javaExe = instance.CustomJavaPath;
+            }
+            else
+            {
+                javaExe = await _javaRuntime.EnsureJavaAsync(mcVersion, _sharedRoot, progress, ct);
+            }
+
+            progress?.Report($"[Aetheris] Выбрана Java: {javaExe}");
+
+            // 3. Ensure modloader
             string activeJsonPath = vanillaJsonPath;
             bool isNeoForge = instance.ModLoader.Equals("neoforge", StringComparison.OrdinalIgnoreCase);
             bool isForge = instance.ModLoader.Equals("forge", StringComparison.OrdinalIgnoreCase);
@@ -60,26 +73,13 @@ namespace AetherisLauncher.Services
             else if (isForge)
             {
                 var loaderVer = string.IsNullOrEmpty(instance.ModLoaderVersion) ? "43.5.0" : instance.ModLoaderVersion;
-                activeJsonPath = await _downloader.EnsureForgeVersionAsync(mcVersion, loaderVer, progress, ct);
+                activeJsonPath = await _downloader.EnsureForgeVersionAsync(mcVersion, loaderVer, javaExe, progress, ct);
             }
             else if (isFabric)
             {
                 var loaderVer = string.IsNullOrEmpty(instance.ModLoaderVersion) ? "0.15.11" : instance.ModLoaderVersion;
                 activeJsonPath = await _downloader.EnsureFabricVersionAsync(mcVersion, loaderVer, progress, ct);
             }
-
-            // 3. Resolve Java (portable on-demand download for specific Minecraft version)
-            string javaExe;
-            if (!string.IsNullOrEmpty(instance.CustomJavaPath) && File.Exists(instance.CustomJavaPath))
-            {
-                javaExe = instance.CustomJavaPath;
-            }
-            else
-            {
-                javaExe = await _javaRuntime.EnsureJavaAsync(mcVersion, _sharedRoot, progress, ct);
-            }
-
-            progress?.Report($"[Aetheris] Выбрана Java: {javaExe}");
 
             // 4. Build Classpath & Collect Libraries
             var classpathEntries = new List<string>();

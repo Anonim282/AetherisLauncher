@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -312,21 +312,35 @@ namespace AetherisLauncher.Services
         public async Task<string> EnsureForgeVersionAsync(
             string gameVersion,
             string loaderVersion,
+            string javaExe,
             IProgress<string>? progress = null,
             CancellationToken ct = default)
         {
             var forgeId = $"forge-{gameVersion}-{loaderVersion}";
             var versionDir = Path.Combine(GetVersionsDirectory(), forgeId);
             var versionJsonPath = Path.Combine(versionDir, $"{forgeId}.json");
+            var forgeClientJar = Path.Combine(GetLibrariesDirectory(), "net", "minecraftforge", "forge", $"{gameVersion}-{loaderVersion}", $"forge-{gameVersion}-{loaderVersion}-client.jar");
             Directory.CreateDirectory(versionDir);
 
-            if (!File.Exists(versionJsonPath) || new FileInfo(versionJsonPath).Length == 0)
+            bool needsInstaller = !File.Exists(versionJsonPath) ||
+                                  new FileInfo(versionJsonPath).Length == 0 ||
+                                  !File.Exists(forgeClientJar);
+
+            if (needsInstaller)
             {
                 progress?.Report($"[Forge] Загрузка инсталлятора Forge {gameVersion}-{loaderVersion}...");
-                var installerUrl = $"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/{gameVersion}-{loaderVersion}/forge-{gameVersion}-{loaderVersion}-installer.jar";
+                var installerUrl = $"https://maven.minecraftforge.net/net/minecraftforge/forge/{gameVersion}-{loaderVersion}/forge-{gameVersion}-{loaderVersion}-installer.jar";
                 var installerTemp = Path.Combine(versionDir, "installer.jar");
 
-                await _network.DownloadFileAsync(installerUrl, installerTemp, null, ct);
+                try
+                {
+                    await _network.DownloadFileAsync(installerUrl, installerTemp, null, ct);
+                }
+                catch
+                {
+                    var mirrorUrl = $"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/{gameVersion}-{loaderVersion}/forge-{gameVersion}-{loaderVersion}-installer.jar";
+                    await _network.DownloadFileAsync(mirrorUrl, installerTemp, null, ct);
+                }
 
                 using (var archive = ZipFile.OpenRead(installerTemp))
                 {
@@ -334,6 +348,39 @@ namespace AetherisLauncher.Services
                         ?? throw new InvalidOperationException("version.json не найден внутри Forge installer.jar");
                     entry.ExtractToFile(versionJsonPath, overwrite: true);
                 }
+
+                // Run Forge installer processor if forge-client.jar is missing (Minecraft 1.20+ client patcher)
+                if (!File.Exists(forgeClientJar))
+                {
+                    progress?.Report($"[Forge] Фоновая генерация библиотек Forge {loaderVersion}...");
+                    var launcherProfilesPath = Path.Combine(_sharedRootDir, "launcher_profiles.json");
+                    if (!File.Exists(launcherProfilesPath))
+                    {
+                        await File.WriteAllTextAsync(launcherProfilesPath, "{\"profiles\":{}}", ct);
+                    }
+
+                    await Task.Run(() =>
+                    {
+                        var psi = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = javaExe,
+                            Arguments = $"-Djava.awt.headless=true -jar \"{installerTemp}\" --installClient \"{_sharedRootDir}\"",
+                            WorkingDirectory = versionDir,
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true
+                        };
+
+                        using var proc = System.Diagnostics.Process.Start(psi);
+                        if (proc != null)
+                        {
+                            proc.WaitForExit();
+                        }
+                    }, ct);
+                }
+
+                try { File.Delete(installerTemp); } catch { }
             }
 
             var forgeJson = await File.ReadAllTextAsync(versionJsonPath, ct);
