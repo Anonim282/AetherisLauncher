@@ -130,7 +130,8 @@
 
                 <!-- Top Center Quick Actions -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button Content="📦 Импорт с CurseForge (.zip)" Style="{StaticResource PrimaryButton}" Click="BtnImportCurseForge_Click" Margin="0,0,12,0" />
+                    <Button Content="🗂️ Импорт модпака (.zip/.rar/.mrpack)" Style="{StaticResource PrimaryButton}" Click="BtnImportArchive_Click" Margin="0,0,12,0" ToolTip="Импорт сборки из архива, CurseForge или Modrinth (.mrpack)" />
+                    <Button Content="📦 CurseForge (.zip)" Style="{StaticResource ModernButton}" Click="BtnImportCurseForge_Click" Margin="0,0,12,0" ToolTip="Импорт по manifest.json с CurseForge" />
                     <Button Content="➕ Новый инстанс" Style="{StaticResource ModernButton}" Click="BtnNewInstance_Click" Margin="0,0,12,0" />
                     <Button Content="📜 Консоль логов" Style="{StaticResource ModernButton}" Click="BtnToggleConsole_Click" />
                 </StackPanel>
@@ -222,8 +223,11 @@
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="📦" FontSize="60" HorizontalAlignment="Center" Margin="0,0,0,16" />
                         <TextBlock Text="Сборок пока нет" FontSize="20" FontWeight="Bold" Foreground="#ECEFF4" HorizontalAlignment="Center" />
-                        <TextBlock Text="Перетащите сюда .zip архив сборки с CurseForge или нажмите кнопку импорта" FontSize="13" Foreground="#8C93A8" HorizontalAlignment="Center" Margin="0,8,0,20" />
-                        <Button Content="Импортировать сборку CurseForge (.zip)" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center" Click="BtnImportCurseForge_Click" />
+                        <TextBlock Text="Перетащите сюда архив сборки (.zip, .rar, .mrpack) или нажмите кнопку импорта" FontSize="13" Foreground="#8C93A8" HorizontalAlignment="Center" Margin="0,8,0,20" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button Content="Импортировать модпак (.zip / .rar / .mrpack)" Style="{StaticResource PrimaryButton}" Margin="0,0,10,0" Click="BtnImportArchive_Click" />
+                            <Button Content="Импорт с CurseForge (.zip)" Style="{StaticResource ModernButton}" Click="BtnImportCurseForge_Click" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -264,7 +268,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid Grid.Row="0" Margin="0,0,0,6">
-                    <TextBlock x:Name="TxtStatus" Text="Готов к работе. Перетащите сборку CurseForge (.zip) для установки." FontSize="13" FontWeight="SemiBold" Foreground="#ECEFF4" />
+                    <TextBlock x:Name="TxtStatus" Text="Готов к работе. Перетащите архив сборки (.zip / .rar) для установки." FontSize="13" FontWeight="SemiBold" Foreground="#ECEFF4" />
                     <TextBlock x:Name="TxtProgressPercentage" Text="" FontSize="13" FontWeight="Bold" Foreground="#00D2FF" HorizontalAlignment="Right" />
                 </Grid>
                 <ProgressBar x:Name="ProgressBarMain" Grid.Row="1" Height="8" Background="#1C202C" Foreground="#00D2FF" BorderThickness="0" Value="0" Maximum="100" />

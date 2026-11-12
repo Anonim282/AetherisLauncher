@@ -26,6 +26,8 @@ namespace AetherisLauncher
         private readonly DiscordRpcService _discord;
         private readonly UpdateService _updateService;
         private CurseForgeImporter _importer = null!;
+        private ArchiveModpackImporter _archiveImporter = null!;
+        private ModrinthImporter _modrinthImporter = null!;
 
         private AuthAccount _activeAccount;
         private ObservableCollection<InstanceInfo> _instances = new();
@@ -83,6 +85,8 @@ namespace AetherisLauncher
             _downloader = new MinecraftDownloader(_network, gameRootDir);
             _launcher = new MinecraftLauncher(_instanceManager, _downloader, _javaRuntime, gameRootDir);
             _importer = new CurseForgeImporter(_network, _instanceManager);
+            _archiveImporter = new ArchiveModpackImporter(_instanceManager);
+            _modrinthImporter = new ModrinthImporter(_network, _instanceManager);
 
             // Hook Minecraft process logs to console
             _launcher.LogReceived += (logLine) =>
@@ -231,6 +235,20 @@ namespace AetherisLauncher
             TxtConsole.Clear();
         }
 
+        private async void BtnImportArchive_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "Модпаки и архивы (*.zip;*.rar;*.mrpack)|*.zip;*.rar;*.mrpack|ZIP архивы (*.zip)|*.zip|RAR архивы (*.rar)|*.rar|Modrinth (*.mrpack)|*.mrpack|Все файлы (*.*)|*.*",
+                Title = "Выберите архив сборки (.zip, .rar) или модпак (.mrpack)"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                await ImportModpackByPathAsync(dialog.FileName);
+            }
+        }
+
         private async void BtnImportCurseForge_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new OpenFileDialog
@@ -241,7 +259,7 @@ namespace AetherisLauncher
 
             if (dialog.ShowDialog() == true)
             {
-                await RunCurseForgeImport(dialog.FileName);
+                await ImportModpackByPathAsync(dialog.FileName);
             }
         }
 
@@ -250,10 +268,138 @@ namespace AetherisLauncher
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files.Length > 0 && files[0].EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                if (files.Length > 0)
                 {
-                    await RunCurseForgeImport(files[0]);
+                    await ImportModpackByPathAsync(files[0]);
                 }
+            }
+        }
+
+        private async Task ImportModpackByPathAsync(string filePath)
+        {
+            if (ModrinthImporter.IsModrinthPack(filePath))
+            {
+                await RunModrinthImport(filePath);
+            }
+            else if (ArchiveModpackImporter.IsCurseForgeManifestZip(filePath))
+            {
+                await RunCurseForgeImport(filePath);
+            }
+            else if (filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                     filePath.EndsWith(".rar", StringComparison.OrdinalIgnoreCase))
+            {
+                await RunArchiveImport(filePath);
+            }
+        }
+
+        private async Task RunModrinthImport(string mrpackPath)
+        {
+            if (!_isConsoleVisible)
+            {
+                BtnToggleConsole_Click(this, new RoutedEventArgs());
+            }
+
+            ProgressBarMain.Value = 0;
+            TxtProgressPercentage.Text = "0%";
+            TxtStatus.Text = "Начало импорта Modrinth модпака...";
+            LogConsole($"[AETHERIS] Начало импорта Modrinth (.mrpack): {mrpackPath}");
+
+            var progress = new Progress<ArchiveImportProgress>(p =>
+            {
+                ProgressBarMain.Value = p.Percentage;
+                TxtStatus.Text = p.StatusText;
+                TxtProgressPercentage.Text = $"{(int)p.Percentage}%";
+                if (p.CurrentFile % 10 == 0 || p.CurrentFile == p.TotalFiles)
+                {
+                    LogConsole($"[IMPORT] {p.StatusText}");
+                }
+            });
+
+            try
+            {
+                var imported = await _modrinthImporter.ImportMrpackAsync(mrpackPath, null, progress);
+                LogConsole($"[AETHERIS] Сборка {imported.Name} ({imported.MinecraftVersion}, {imported.ModLoader}) успешно импортирована!");
+                MessageBox.Show($"Сборка \"{imported.Name}\" (Minecraft {imported.MinecraftVersion}, {imported.ModLoader}) успешно импортирована!",
+                    "Импорт завершен", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                RefreshInstances();
+                TxtStatus.Text = $"Сборка {imported.Name} готова к запуску.";
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[IMPORT ERROR] {ex}");
+                MessageBox.Show($"Ошибка импорта сборки: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                TxtStatus.Text = "Ошибка при импорте сборки.";
+            }
+            finally
+            {
+                ProgressBarMain.Value = 100;
+            }
+        }
+
+        private async Task RunArchiveImport(string archivePath)
+        {
+            try
+            {
+                TxtStatus.Text = "Анализ архива сборки...";
+                ProgressBarMain.IsIndeterminate = true;
+
+                var scanResult = await _archiveImporter.ScanArchiveAsync(archivePath);
+                ProgressBarMain.IsIndeterminate = false;
+
+                var dlg = new ImportArchiveWindow(archivePath, scanResult, _settings.DefaultMemoryMb)
+                {
+                    Owner = this
+                };
+
+                if (dlg.ShowDialog() != true || dlg.ResultInstance == null)
+                {
+                    TxtStatus.Text = "Импорт сборки отменён.";
+                    ProgressBarMain.Value = 0;
+                    return;
+                }
+
+                if (!_isConsoleVisible)
+                {
+                    BtnToggleConsole_Click(this, new RoutedEventArgs());
+                }
+
+                ProgressBarMain.Value = 0;
+                TxtProgressPercentage.Text = "0%";
+                TxtStatus.Text = $"Распаковка сборки {dlg.ResultInstance.Name}...";
+                LogConsole($"[AETHERIS] Начало импорта сборки из архива: {archivePath}");
+                LogConsole($"[IMPORT] {scanResult.SummaryText}");
+
+                var progress = new Progress<ArchiveImportProgress>(p =>
+                {
+                    ProgressBarMain.Value = p.Percentage;
+                    TxtStatus.Text = p.StatusText;
+                    TxtProgressPercentage.Text = $"{(int)p.Percentage}%";
+                    if (p.CurrentFile == p.TotalFiles || p.CurrentFile % 100 == 0)
+                    {
+                        LogConsole($"[IMPORT] {p.StatusText}");
+                    }
+                });
+
+                var imported = await _archiveImporter.ImportArchiveAsync(archivePath, scanResult, dlg.ResultInstance, progress);
+                LogConsole($"[AETHERIS] Сборка {imported.Name} ({imported.MinecraftVersion}, {imported.ModLoader}) успешно импортирована!");
+                MessageBox.Show($"Сборка \"{imported.Name}\" (Minecraft {imported.MinecraftVersion}, {imported.ModLoader}) успешно импортирована!",
+                    "Импорт завершен", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                RefreshInstances();
+                TxtStatus.Text = $"Сборка {imported.Name} готова к запуску.";
+            }
+            catch (Exception ex)
+            {
+                ProgressBarMain.IsIndeterminate = false;
+                LogConsole($"[IMPORT ERROR] {ex}");
+                MessageBox.Show($"Ошибка импорта сборки: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                TxtStatus.Text = "Ошибка при импорте сборки.";
+            }
+            finally
+            {
+                ProgressBarMain.IsIndeterminate = false;
+                ProgressBarMain.Value = 100;
             }
         }
 
